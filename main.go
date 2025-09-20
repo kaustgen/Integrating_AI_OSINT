@@ -128,45 +128,42 @@ func retrieveStructJSON(cveResp CVEResponse) []FlattenedCVE {
 	return result
 }
 
-// CVE's must be coupled with CPEs
-// CPE - one to CVE - many relationship
-// Must maintain a database of CPEs (inventory) and have a tag in the CVE table telling which CPE it belongs to
-// Once we determine which CVEs belong to which CPEs and that automation is completed we can start analysis
-// The analysis will leverage LLMs to generate a report which will be sent to an admin
-// Report will consist of - changes today regarding our security posture (new CVEs etc.)
-// If I have the time, will consist of an OSINT leveraging Shodan etc. that will grab hardware and tell you what things are vulnerable instantly
-// Attempting to automate vulnerability research
-func main() {
+// Takes a start time, end time, total CVE and then allows users to use an API
+// Then calls retrieveStructJSON and returns a JSON that can be parsed by Go
+func getCVEs(start string, end string, count string, api ...bool) []FlattenedCVE {
+	// Default is no API
+	api_select := false
 
-	// Get the API from the .env
-	err := godotenv.Load()
-	if err != nil {
-		log.Fatal("Error loading .env file")
+	// If the user didn't input anything we default to false, otherwise we use the api
+	if len(api) > 0 {
+		api_select = api[0]
 	}
 
-	// Read the API key
-	NVD_API := os.Getenv("NVD_API")
-
-	if NVD_API == "" {
-		log.Fatal("NVD_API is not set in .env")
-	}
-
-	// Retrieve a specific cveID
-	//cveID := "CVE-2025-10415"
-	//url := fmt.Sprintf("https://services.nvd.nist.gov/rest/json/cves/2.0?cveId=%s", cveID)
-
-	// Retrieve CVEs modified in the last week
-	start := time.Now().AddDate(0, 0, -7).Format("2006-01-02T15:04:05.000")
-	end := time.Now().Format("2006-01-02T15:04:05.000")
-
-	url := fmt.Sprintf("https://services.nvd.nist.gov/rest/json/cves/2.0?pubStartDate=%s&pubEndDate=%s&resultsPerPage=2000", start, end)
+	// Retriev items from the API
+	url := fmt.Sprintf("https://services.nvd.nist.gov/rest/json/cves/2.0?pubStartDate=%s&pubEndDate=%s&resultsPerPage=%s", start, end, count)
 
 	// Handle the response error
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		panic(err)
 	}
-	req.Header.Add("apiKey", NVD_API)
+
+	// If there is an API_key
+	if api_select {
+		// Get the API from the .env
+		err := godotenv.Load()
+		if err != nil {
+			log.Fatal("Error loading .env file")
+		}
+
+		// Read the API key
+		NVD_API := os.Getenv("NVD_API")
+
+		if NVD_API == "" {
+			log.Fatal("NVD_API is not set in .env")
+		}
+		req.Header.Add("apiKey", NVD_API)
+	}
 
 	client := &http.Client{}
 	resp, err := client.Do(req)
@@ -181,7 +178,7 @@ func main() {
 		fmt.Printf("Unexpected status: %d\n", resp.StatusCode)
 		bodyBytes, _ := io.ReadAll(resp.Body)
 		fmt.Println("Body:", string(bodyBytes))
-		return
+		panic("Error Code")
 	}
 
 	// Put the reponse into our struct
@@ -192,6 +189,74 @@ func main() {
 	}
 
 	flatCVE := retrieveStructJSON(cveResp)
+
+	return flatCVE
+}
+
+// CVE's must be coupled with CPEs
+// CPE - one to CVE - many relationship
+// Must maintain a database of CPEs (inventory) and have a tag in the CVE table telling which CPE it belongs to
+// Once we determine which CVEs belong to which CPEs and that automation is completed we can start analysis
+// The analysis will leverage LLMs to generate a report which will be sent to an admin
+// Report will consist of - changes today regarding our security posture (new CVEs etc.)
+// If I have the time, will consist of an OSINT leveraging Shodan etc. that will grab hardware and tell you what things are vulnerable instantly
+// Attempting to automate vulnerability research
+func main() {
+
+	// Get the API from the .env
+	// err := godotenv.Load()
+	// if err != nil {
+	// 	log.Fatal("Error loading .env file")
+	// }
+
+	// Read the API key
+	//NVD_API := os.Getenv("NVD_API")
+
+	// if NVD_API == "" {
+	// 	log.Fatal("NVD_API is not set in .env")
+	// }
+
+	// Retrieve a specific cveID
+	//cveID := "CVE-2025-10415"
+	//url := fmt.Sprintf("https://services.nvd.nist.gov/rest/json/cves/2.0?cveId=%s", cveID)
+
+	// Retrieve CVEs modified in the last week
+	var start string = time.Now().AddDate(0, 0, -7).Format("2006-01-02T15:04:05.000")
+	var end string = time.Now().Format("2006-01-02T15:04:05.000")
+
+	// url := fmt.Sprintf("https://services.nvd.nist.gov/rest/json/cves/2.0?pubStartDate=%s&pubEndDate=%s&resultsPerPage=2000", start, end)
+
+	// // Handle the response error
+	// req, err := http.NewRequest("GET", url, nil)
+	// if err != nil {
+	// 	panic(err)
+	// }
+	// //req.Header.Add("apiKey", NVD_API)
+
+	// client := &http.Client{}
+	// resp, err := client.Do(req)
+	// if err != nil {
+	// 	panic(err)
+	// }
+	// // Close the response body after the function
+	// defer resp.Body.Close()
+
+	// // If there is an error, print it out
+	// if resp.StatusCode != http.StatusOK {
+	// 	fmt.Printf("Unexpected status: %d\n", resp.StatusCode)
+	// 	bodyBytes, _ := io.ReadAll(resp.Body)
+	// 	fmt.Println("Body:", string(bodyBytes))
+	// 	return
+	// }
+
+	// // Put the reponse into our struct
+	// var cveResp CVEResponse
+	// dec := json.NewDecoder(resp.Body)
+	// if err := dec.Decode(&cveResp); err != nil {
+	// 	panic(err)
+	// }
+	var count string = "2000"
+	var flatCVE []FlattenedCVE = getCVEs(start, end, count)
 
 	// How to access all the values in flatCVE
 	for _, v := range flatCVE {
