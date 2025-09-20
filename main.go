@@ -98,7 +98,6 @@ func retrieveStructJSON(cveResp CVEResponse) []FlattenedCVE {
 		}
 
 		// For the metrics struct
-		// for _, metrics := v.CVE.Metrics {
 		for _, cvss := range v.CVE.Metrics.CVSSv40 {
 			f.CVSSData = append(f.CVSSData, CVSSData{
 				Source:       cvss.Source,
@@ -111,7 +110,7 @@ func retrieveStructJSON(cveResp CVEResponse) []FlattenedCVE {
 		}
 		// }
 
-		// FOr the configureations
+		// For the configureations
 		for _, cpe := range v.CVE.Configurations {
 			for _, node := range cpe.Nodes {
 				for _, m := range node.CPEMatch {
@@ -194,13 +193,23 @@ func main() {
 
 	flatCVE := retrieveStructJSON(cveResp)
 
+	// How to access all the values in flatCVE
 	for _, v := range flatCVE {
 		if len(v.Nodes) > 0 {
 			fmt.Println(v.ID)
+			fmt.Println(v.Published)
+			fmt.Println(v.LastModified)
+			fmt.Println(v.Descriptions)
 			for _, nodes := range v.Nodes {
+				fmt.Println(nodes.Vulnerable)
+				fmt.Println(nodes.Criteria)
 				fmt.Println(nodes.MatchCriteriaID)
+
 			}
 			for _, cvss := range v.CVSSData {
+				fmt.Println(cvss.Source)
+				fmt.Println(cvss.Type)
+				fmt.Println(cvss.Version)
 				fmt.Println(cvss.VectorString)
 				fmt.Println(cvss.BaseScore)
 				fmt.Println(cvss.BaseSeverity)
