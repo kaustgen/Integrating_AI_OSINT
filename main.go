@@ -1,3 +1,13 @@
+/* 	Author: Kaleb Austgen
+Date Created: 9-19-25
+Last Modified: 9-19-25
+Purpose:
+Ingestion from the National Vulnerability Database -> takes a date filter on CVSS and reads it into a struct
+
+Will later feed this into regex that takes an inventory alongside keyword heuristics and an LLM to determine relevant CVEs to our inventory
+Will also be coupled with several hardware OSINT systems to find vulnerabilities for those systems automatically
+*/
+
 package main
 
 import (
@@ -203,83 +213,36 @@ func getCVEs(start string, end string, count string, api ...bool) []FlattenedCVE
 // Attempting to automate vulnerability research
 func main() {
 
-	// Get the API from the .env
-	// err := godotenv.Load()
-	// if err != nil {
-	// 	log.Fatal("Error loading .env file")
-	// }
-
-	// Read the API key
-	//NVD_API := os.Getenv("NVD_API")
-
-	// if NVD_API == "" {
-	// 	log.Fatal("NVD_API is not set in .env")
-	// }
-
-	// Retrieve a specific cveID
-	//cveID := "CVE-2025-10415"
-	//url := fmt.Sprintf("https://services.nvd.nist.gov/rest/json/cves/2.0?cveId=%s", cveID)
-
-	// Retrieve CVEs modified in the last week
+	// Vars for the NVD CVE API
 	var start string = time.Now().AddDate(0, 0, -7).Format("2006-01-02T15:04:05.000")
 	var end string = time.Now().Format("2006-01-02T15:04:05.000")
-
-	// url := fmt.Sprintf("https://services.nvd.nist.gov/rest/json/cves/2.0?pubStartDate=%s&pubEndDate=%s&resultsPerPage=2000", start, end)
-
-	// // Handle the response error
-	// req, err := http.NewRequest("GET", url, nil)
-	// if err != nil {
-	// 	panic(err)
-	// }
-	// //req.Header.Add("apiKey", NVD_API)
-
-	// client := &http.Client{}
-	// resp, err := client.Do(req)
-	// if err != nil {
-	// 	panic(err)
-	// }
-	// // Close the response body after the function
-	// defer resp.Body.Close()
-
-	// // If there is an error, print it out
-	// if resp.StatusCode != http.StatusOK {
-	// 	fmt.Printf("Unexpected status: %d\n", resp.StatusCode)
-	// 	bodyBytes, _ := io.ReadAll(resp.Body)
-	// 	fmt.Println("Body:", string(bodyBytes))
-	// 	return
-	// }
-
-	// // Put the reponse into our struct
-	// var cveResp CVEResponse
-	// dec := json.NewDecoder(resp.Body)
-	// if err := dec.Decode(&cveResp); err != nil {
-	// 	panic(err)
-	// }
 	var count string = "2000"
+
+	// Create a struct with certain fields from the CVSS
 	var flatCVE []FlattenedCVE = getCVEs(start, end, count)
 
 	// How to access all the values in flatCVE
-	for _, v := range flatCVE {
-		if len(v.Nodes) > 0 {
-			fmt.Println(v.ID)
-			fmt.Println(v.Published)
-			fmt.Println(v.LastModified)
-			fmt.Println(v.Descriptions)
-			for _, nodes := range v.Nodes {
-				fmt.Println(nodes.Vulnerable)
-				fmt.Println(nodes.Criteria)
-				fmt.Println(nodes.MatchCriteriaID)
+	for _, v := range flatCVE { // List of vulnerabilities
+		fmt.Println(v.ID)           // Specific ID
+		fmt.Println(v.Published)    // Published Date
+		fmt.Println(v.LastModified) // Mod. date (important)
+		fmt.Println(v.Descriptions) // Description (important)
 
-			}
-			for _, cvss := range v.CVSSData {
-				fmt.Println(cvss.Source)
-				fmt.Println(cvss.Type)
-				fmt.Println(cvss.Version)
-				fmt.Println(cvss.VectorString)
-				fmt.Println(cvss.BaseScore)
-				fmt.Println(cvss.BaseSeverity)
-			}
-			fmt.Println()
+		for _, nodes := range v.Nodes { // List of affected nodes
+			fmt.Println(nodes.Vulnerable)      // True/False bool
+			fmt.Println(nodes.Criteria)        // Criteria - cpe value
+			fmt.Println(nodes.MatchCriteriaID) // UUID for the cpe, not useful outside NVD
+
 		}
+
+		for _, cvss := range v.CVSSData { //CVSS4.0 raw data
+			fmt.Println(cvss.Source)       // Source (usually an email alert)
+			fmt.Println(cvss.Type)         // Primary or secondary
+			fmt.Println(cvss.Version)      // 4.0
+			fmt.Println(cvss.VectorString) // The CVSS alert string - can be parsed for all informatio we want
+			fmt.Println(cvss.BaseScore)    // Base score calculated using the 4.0 algorithm
+			fmt.Println(cvss.BaseSeverity) // Severity level based on the basescore, low, medium, high, critical
+		}
+		fmt.Println()
 	}
 }
