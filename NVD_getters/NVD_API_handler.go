@@ -44,13 +44,37 @@ type CVEResponse struct {
 						BaseSeverity string  `json:"baseSeverity"`
 					}
 				} `json:"cvssMetricV40"`
+				CVSSv31 []struct {
+					Source   string `json:"source"`
+					Type     string `json:"type"`
+					CVSSData struct {
+						Version      string  `json:"version"`
+						VectorString string  `json:"vectorString"`
+						BaseScore    float32 `json:"baseScore"`
+						BaseSeverity string  `json:"baseSeverity"`
+					} `json:"cvssData"`
+				} `json:"cvssMetricV31"`
+				CVSSv30 []struct {
+					Source   string `json:"source"`
+					Type     string `json:"type"`
+					CVSSData struct {
+						Version      string  `json:"version"`
+						VectorString string  `json:"vectorString"`
+						BaseScore    float32 `json:"baseScore"`
+						BaseSeverity string  `json:"baseSeverity"`
+					} `json:"cvssData"`
+				} `json:"cvssMetricV30"`
 			} `json:"metrics"`
 			Configurations []struct {
 				Nodes []struct {
 					CPEMatch []struct {
-						Vulnerable      bool   `json:"vulnerable"`
-						Criteria        string `json:"criteria"`
-						MatchCriteriaID string `json:"matchCriteriaId"`
+						Vulnerable            bool   `json:"vulnerable"`
+						Criteria              string `json:"criteria"`
+						MatchCriteriaID       string `json:"matchCriteriaId"`
+						VersionStartIncluding string `json:"versionStartIncluding"`
+						VersionEndIncluding   string `json:"versionEndIncluding"`
+						VersionStartExcluding string `json:"versionStartExcluding"`
+						VersionEndExcluding   string `json:"versionEndExcluding"`
 					} `json:"cpeMatch"`
 				} `json:"nodes"`
 			} `json:"configurations"`
@@ -70,9 +94,13 @@ type FlattenedCVE struct {
 }
 
 type CPEMatch struct {
-	Vulnerable      bool
-	Criteria        string
-	MatchCriteriaID string
+	Vulnerable            bool
+	Criteria              string
+	MatchCriteriaID       string
+	VersionStartIncluding string
+	VersionEndIncluding   string
+	VersionStartExcluding string
+	VersionEndExcluding   string
 }
 
 type CVSSv40 struct {
@@ -107,7 +135,7 @@ func retrieveStructJSON(cveResp CVEResponse) []FlattenedCVE {
 			f.Descriptions = append(f.Descriptions, desc.Value)
 		}
 
-		// For the metrics struct
+		// For the metrics struct - try v4.0 first, then fall back to v3.1, then v3.0
 		for _, cvss := range v.CVE.Metrics.CVSSv40 {
 			f.CVSSData = append(f.CVSSData, CVSSData{
 				Source:       cvss.Source,
@@ -118,16 +146,39 @@ func retrieveStructJSON(cveResp CVEResponse) []FlattenedCVE {
 				BaseSeverity: cvss.CVSSData.BaseSeverity,
 			})
 		}
-		// }
+		for _, cvss := range v.CVE.Metrics.CVSSv31 {
+			f.CVSSData = append(f.CVSSData, CVSSData{
+				Source:       cvss.Source,
+				Type:         cvss.Type,
+				Version:      cvss.CVSSData.Version,
+				VectorString: cvss.CVSSData.VectorString,
+				BaseScore:    cvss.CVSSData.BaseScore,
+				BaseSeverity: cvss.CVSSData.BaseSeverity,
+			})
+		}
+		for _, cvss := range v.CVE.Metrics.CVSSv30 {
+			f.CVSSData = append(f.CVSSData, CVSSData{
+				Source:       cvss.Source,
+				Type:         cvss.Type,
+				Version:      cvss.CVSSData.Version,
+				VectorString: cvss.CVSSData.VectorString,
+				BaseScore:    cvss.CVSSData.BaseScore,
+				BaseSeverity: cvss.CVSSData.BaseSeverity,
+			})
+		}
 
-		// For the configureations
+		// For the configurations
 		for _, cpe := range v.CVE.Configurations {
 			for _, node := range cpe.Nodes {
 				for _, m := range node.CPEMatch {
 					f.Nodes = append(f.Nodes, CPEMatch{
-						Vulnerable:      m.Vulnerable,
-						Criteria:        m.Criteria,
-						MatchCriteriaID: m.MatchCriteriaID,
+						Vulnerable:            m.Vulnerable,
+						Criteria:              m.Criteria,
+						MatchCriteriaID:       m.MatchCriteriaID,
+						VersionStartIncluding: m.VersionStartIncluding,
+						VersionEndIncluding:   m.VersionEndIncluding,
+						VersionStartExcluding: m.VersionStartExcluding,
+						VersionEndExcluding:   m.VersionEndExcluding,
 					})
 				}
 			}
