@@ -198,6 +198,12 @@ func main() {
 		}
 	}
 
+	// Generate final detailed vulnerability report
+	fmt.Println("\nGenerating detailed vulnerability report...")
+	if err := db.PrintVulnerabilityReportWithVulns(vulns); err != nil {
+		log.Fatal("Failed to generate vulnerability report:", err)
+	}
+
 	// ==================== STEP 8: LLM Risk Assessment ====================
 	fmt.Println("\n[8/8] Generating AI-powered risk assessment...")
 
@@ -223,12 +229,6 @@ func main() {
 		fmt.Println("⚠️  OpenAI API key not found - skipping AI analysis")
 		fmt.Println("   Set OPENAI_API_KEY in .env file to enable this feature")
 		fmt.Println("   Get your API key from: https://platform.openai.com/api-keys")
-	}
-
-	// Generate final detailed vulnerability report
-	fmt.Println("\nGenerating detailed vulnerability report...")
-	if err := db.PrintVulnerabilityReportWithVulns(vulns); err != nil {
-		log.Fatal("Failed to generate vulnerability report:", err)
 	}
 
 	// ==================== Summary ====================
