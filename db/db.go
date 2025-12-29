@@ -1,3 +1,7 @@
+// Author: Kaleb Austgen
+// Date Created: 12/28/25
+// Purpose: Database initialization and schema definition
+
 package db
 
 import (

@@ -1,3 +1,7 @@
+// Author: Kaleb Austgen
+// Date Created: 12/28/25
+// Purpose: Fake inventory creation
+
 package db
 
 import (
@@ -116,18 +120,21 @@ func CreateFakeInventory(db *sql.DB) error {
 		},
 
 		// 3 Web servers (outdated - vulnerable)
+		// For the first web server I am using a real Amazon server I found in Shodan for testing purposes
 		{
 			AssetID:        "WEB-001",
 			Hostname:       "web-prod-01",
-			IPAddress:      "203.0.113.45",
+			IPAddress:      "18.169.92.178",
 			CPEString:      "cpe:2.3:a:apache:http_server:2.4.49:*:*:*:*:*:*:*",
 			AssetType:      "web_server",
 			InternetFacing: true,
 		},
+
+		// This IP is from a server in the netherlands, also indexed in Shodan
 		{
 			AssetID:        "WEB-002",
 			Hostname:       "api-gateway-01",
-			IPAddress:      "203.0.113.50",
+			IPAddress:      "31.57.152.121",
 			CPEString:      "cpe:2.3:a:igor_sysoev:nginx:1.18.0:*:*:*:*:*:*:*",
 			AssetType:      "web_server",
 			InternetFacing: true,

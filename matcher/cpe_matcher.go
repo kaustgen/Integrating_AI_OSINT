@@ -1,3 +1,7 @@
+// Author: Kaleb Austgen
+// Date Created: 12/15/25
+// Purpose: CPE matching logic between inventory assets and CVE entries
+
 package matcher
 
 import (
@@ -43,10 +47,10 @@ func MatchCPE(inventoryCPE, cveCPE, versionStartIncluding, versionEndIncluding, 
 	// Version matching logic
 	if cveVersion == "*" || cveVersion == "-" {
 		// Wildcard version - check if version ranges are specified
-		if versionStartIncluding != "" || versionEndIncluding != "" || 
-		   versionStartExcluding != "" || versionEndExcluding != "" {
-			return checkVersionRange(invVersion, versionStartIncluding, versionEndIncluding, 
-			                        versionStartExcluding, versionEndExcluding)
+		if versionStartIncluding != "" || versionEndIncluding != "" ||
+			versionStartExcluding != "" || versionEndExcluding != "" {
+			return checkVersionRange(invVersion, versionStartIncluding, versionEndIncluding,
+				versionStartExcluding, versionEndExcluding)
 		}
 		// No version specified means all versions are vulnerable
 		return true, nil
@@ -58,10 +62,10 @@ func MatchCPE(inventoryCPE, cveCPE, versionStartIncluding, versionEndIncluding, 
 	}
 
 	// If there are version ranges even with specific version, check them
-	if versionStartIncluding != "" || versionEndIncluding != "" || 
-	   versionStartExcluding != "" || versionEndExcluding != "" {
+	if versionStartIncluding != "" || versionEndIncluding != "" ||
+		versionStartExcluding != "" || versionEndExcluding != "" {
 		return checkVersionRange(invVersion, versionStartIncluding, versionEndIncluding,
-		                        versionStartExcluding, versionEndExcluding)
+			versionStartExcluding, versionEndExcluding)
 	}
 
 	return false, nil

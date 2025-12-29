@@ -1,3 +1,6 @@
+// Author: Kaleb Austgen
+// Date Created: 12/28/25
+// Purpose: Database storage for CVE entries
 package db
 
 import (
