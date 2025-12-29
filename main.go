@@ -13,6 +13,7 @@ import (
 	"github.com/joho/godotenv"
 	NVD_API_handler "github.com/kaustgen/Integrating_AI_OSINT/NVD_getters"
 	"github.com/kaustgen/Integrating_AI_OSINT/db"
+	"github.com/kaustgen/Integrating_AI_OSINT/greynoise"
 	"github.com/kaustgen/Integrating_AI_OSINT/kev"
 	"github.com/kaustgen/Integrating_AI_OSINT/shodan"
 )
@@ -96,7 +97,7 @@ func main() {
 	fmt.Printf("✅ Stored %d KEV entries (some may be filtered if CVE not in database)\n", kevCount)
 
 	// ==================== STEP 5: Shodan Exposure Validation ====================
-	fmt.Println("\n[5/6] Validating internet exposure via Shodan...")
+	fmt.Println("\n[5/7] Validating internet exposure via Shodan...")
 
 	shodanAPIKey := os.Getenv("SHODAN_API_KEY")
 	var shodanClient *shodan.ShodanClient
@@ -114,8 +115,23 @@ func main() {
 		}
 	}
 
-	// ==================== STEP 6: Match and Generate Report ====================
-	fmt.Println("\n[6/6] Analyzing vulnerabilities and generating report...")
+	// ==================== STEP 6: GreyNoise Threat Intelligence ====================
+	fmt.Println("\n[6/7] Querying GreyNoise for active exploitation attempts...")
+
+	greynoiseAPIKey := os.Getenv("GREYNOISE_API_KEY")
+	var greynoiseClient *greynoise.GreyNoiseClient
+
+	if greynoiseAPIKey == "" {
+		fmt.Println("⚠️  GreyNoise API key not found - skipping threat intelligence")
+		fmt.Println("   Set GREYNOISE_API_KEY in .env file to enable this feature")
+		fmt.Println("   Get your API key from: https://www.greynoise.io/")
+	} else {
+		greynoiseClient = greynoise.NewGreyNoiseClient(greynoiseAPIKey)
+		// Tier detection happens in NewGreyNoiseClient
+	}
+
+	// ==================== STEP 7: Match and Generate Report ====================
+	fmt.Println("\n[7/7] Analyzing vulnerabilities and generating report...")
 	// This performs:
 	// 1. CPE matching between inventory and CVEs
 	// 2. Version range validation
@@ -135,6 +151,43 @@ func main() {
 		}
 	}
 
+	// Enhance with GreyNoise threat intelligence if available
+	// This queries only KEV vulnerabilities to minimize API costs
+	if greynoiseClient != nil {
+		// Count how many KEV vulnerabilities we have
+		kevVulns := 0
+		uniqueCVEs := make(map[string]bool)
+		for _, v := range vulns {
+			if v.InKEV {
+				kevVulns++
+				uniqueCVEs[v.CVEID] = true
+			}
+		}
+
+		if kevVulns > 0 {
+			fmt.Printf("Analyzing %d KEV vulnerabilities (%d unique CVEs)...\n", kevVulns, len(uniqueCVEs))
+			vulns, err = db.EnhanceWithGreyNoiseData(database, greynoiseClient, vulns)
+			if err != nil {
+				log.Printf("Warning: Failed to enhance with GreyNoise data: %v", err)
+			} else {
+				// Count how many have active exploitation
+				activeCount := 0
+				for _, v := range vulns {
+					if v.GreyNoiseActive {
+						activeCount++
+					}
+				}
+				if activeCount > 0 {
+					fmt.Printf("🎯 Found active exploitation attempts on %d vulnerabilities\n", activeCount)
+				} else {
+					fmt.Println("✅ No active exploitation attempts detected")
+				}
+			}
+		} else {
+			fmt.Println("No KEV vulnerabilities found - skipping GreyNoise queries")
+		}
+	}
+
 	// Generate final report (now includes Shodan data)
 	if err := db.PrintVulnerabilityReportWithVulns(vulns); err != nil {
 		log.Fatal("Failed to generate vulnerability report:", err)
@@ -148,10 +201,14 @@ func main() {
 	fmt.Println("  ✅ NVD CVE ingestion with CPE matching")
 	fmt.Println("  ✅ KEV integration for exploit prioritization")
 	fmt.Println("  ✅ Shodan exposure validation")
+	fmt.Println("  ✅ GreyNoise active threat intelligence")
 	fmt.Println("  ✅ Semantic version comparison")
 	fmt.Println("  ✅ Risk-based vulnerability sorting")
+	fmt.Println("\nNote:")
+	fmt.Println("  ⚠️  GreyNoise data may be simulated (Community API tier)")
+	fmt.Println("     Production deployment requires Researcher tier ($100/month)")
 	fmt.Println("\nNext Steps:")
-	fmt.Println("  1. Add GreyNoise for active exploitation detection")
-	fmt.Println("  2. Implement RAG with LLM for contextual report generation")
-	fmt.Println("  3. Add automated alerting for KEV vulnerabilities")
+	fmt.Println("  1. Implement RAG with LLM for contextual report generation")
+	fmt.Println("  2. Add automated alerting for KEV vulnerabilities")
+	fmt.Println("  3. Consider GreyNoise Researcher tier for production deployment")
 }

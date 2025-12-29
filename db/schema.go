@@ -97,4 +97,28 @@ CREATE TABLE IF NOT EXISTS shodan_cache (
 -- Index for timestamp-based cache invalidation
 -- Allows efficient cleanup of expired cache entries
 CREATE INDEX IF NOT EXISTS idx_shodan_last_checked ON shodan_cache(last_checked);
+
+-- GreyNoise Cache Table: Stores GreyNoise threat intelligence for CVEs
+-- TTL: 24 hours (attack patterns change quickly)
+-- Only caches queries for KEV vulnerabilities (high-priority threats)
+CREATE TABLE IF NOT EXISTS greynoise_cache (
+    cve_id TEXT PRIMARY KEY,                     -- CVE identifier (links to cves.cve_id)
+    scan_count INTEGER NOT NULL DEFAULT 0,       -- Total IPs scanning for this CVE
+    classification_malicious INTEGER DEFAULT 0,  -- Count of malicious scanners
+    classification_benign INTEGER DEFAULT 0,     -- Count of benign scanners (researchers/security tools)
+    tags TEXT,                                   -- JSON array: ["exploit", "ransomware", "botnet"]
+    top_countries TEXT,                          -- JSON object: {"CN": 342, "US": 198, "RU": 156}
+    first_seen TEXT,                             -- ISO 8601: When scanning first detected
+    last_seen TEXT,                              -- ISO 8601: Most recent scanning activity
+    last_checked TEXT NOT NULL,                  -- ISO 8601: Cache timestamp for 24-hour TTL
+    FOREIGN KEY (cve_id) REFERENCES cves(cve_id)
+);
+
+-- Index for timestamp-based cache expiration
+-- Allows efficient queries like: WHERE last_checked > datetime('now', '-24 hours')
+CREATE INDEX IF NOT EXISTS idx_greynoise_last_checked ON greynoise_cache(last_checked);
+
+-- Index for finding high-activity threats
+-- Speeds up queries filtering by scan_count (e.g., > 1000 IPs = mass campaign)
+CREATE INDEX IF NOT EXISTS idx_greynoise_scan_count ON greynoise_cache(scan_count);
 `
