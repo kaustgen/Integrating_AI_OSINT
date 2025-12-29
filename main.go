@@ -9,12 +9,14 @@ import (
 	"log"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/joho/godotenv"
 	NVD_API_handler "github.com/kaustgen/Integrating_AI_OSINT/NVD_getters"
 	"github.com/kaustgen/Integrating_AI_OSINT/db"
 	"github.com/kaustgen/Integrating_AI_OSINT/greynoise"
 	"github.com/kaustgen/Integrating_AI_OSINT/kev"
+	"github.com/kaustgen/Integrating_AI_OSINT/llm"
 	"github.com/kaustgen/Integrating_AI_OSINT/shodan"
 )
 
@@ -61,14 +63,22 @@ func main() {
 
 	// ==================== STEP 2: Fetch NVD CVEs ====================
 	fmt.Println("\n[2/5] Fetching CVEs from NVD...")
-	// Fetch CVEs from October 2021 to test Apache 2.4.49 vulnerability (CVE-2021-41773)
-	// This demonstrates vulnerability matching with our inventory
-	// In production, use incremental updates based on last_modified date
-	start := "2021-10-01T00:00:00.000"
-	end := "2021-10-31T23:59:59.000"
+	// Incremental updates based on last_modified date (last 7 days)
+	// This fetches CVEs that were published or modified in the last week
+	end := time.Now().UTC()
+	start := end.AddDate(0, 0, -7) // 7 days ago
 
-	cves := NVD_API_handler.GetCVEs(start, end, "2000", true)
-	fmt.Printf("Found %d CVEs from October 2021 (includes Apache 2.4.49 vulnerabilities)\n", len(cves))
+	// Format dates for NVD API (ISO 8601 format)
+	startStr := start.Format("2006-01-02T15:04:05.000")
+	endStr := end.Format("2006-01-02T15:04:05.000")
+
+	// For testing with October 2021 data (Apache 2.4.49 vulnerabilities):
+	// Uncomment these lines to test with historical data
+	// startStr := "2021-10-01T00:00:00.000"
+	// endStr := "2021-10-31T23:59:59.000"
+
+	cves := NVD_API_handler.GetCVEs(startStr, endStr, "2000", true)
+	fmt.Printf("Found %d CVEs from last 7 days (%s to %s)\n", len(cves), start.Format("2006-01-02"), end.Format("2006-01-02"))
 
 	// ==================== STEP 3: Store NVD CVEs ====================
 	fmt.Println("\n[3/5] Storing CVEs in database...")
@@ -188,7 +198,35 @@ func main() {
 		}
 	}
 
-	// Generate final report (now includes Shodan data)
+	// ==================== STEP 8: LLM Risk Assessment ====================
+	fmt.Println("\n[8/8] Generating AI-powered risk assessment...")
+
+	llmClient := llm.NewLLMClient()
+	if llmClient != nil && len(vulns) > 0 {
+		fmt.Println("Building risk assessment prompt...")
+		prompt := llm.BuildRiskAssessmentPrompt(vulns)
+
+		fmt.Println("Querying OpenAI API...")
+		assessment, err := llmClient.GenerateRiskAssessment(prompt)
+		if err != nil {
+			log.Printf("⚠️  LLM analysis failed: %v", err)
+			fmt.Println("   Continuing without AI risk assessment")
+		} else {
+			// Print AI-generated risk assessment
+			fmt.Println("\n" + strings.Repeat("=", 80))
+			fmt.Println("🤖 AI-GENERATED RISK ASSESSMENT (Top 5 Critical Assets)")
+			fmt.Println(strings.Repeat("=", 80))
+			fmt.Println(assessment)
+			fmt.Println(strings.Repeat("=", 80))
+		}
+	} else if llmClient == nil {
+		fmt.Println("⚠️  OpenAI API key not found - skipping AI analysis")
+		fmt.Println("   Set OPENAI_API_KEY in .env file to enable this feature")
+		fmt.Println("   Get your API key from: https://platform.openai.com/api-keys")
+	}
+
+	// Generate final detailed vulnerability report
+	fmt.Println("\nGenerating detailed vulnerability report...")
 	if err := db.PrintVulnerabilityReportWithVulns(vulns); err != nil {
 		log.Fatal("Failed to generate vulnerability report:", err)
 	}
@@ -202,13 +240,13 @@ func main() {
 	fmt.Println("  ✅ KEV integration for exploit prioritization")
 	fmt.Println("  ✅ Shodan exposure validation")
 	fmt.Println("  ✅ GreyNoise active threat intelligence")
+	fmt.Println("  ✅ LLM-powered risk assessment (OpenAI GPT-4o-mini)")
 	fmt.Println("  ✅ Semantic version comparison")
 	fmt.Println("  ✅ Risk-based vulnerability sorting")
 	fmt.Println("\nNote:")
 	fmt.Println("  ⚠️  GreyNoise data may be simulated (Community API tier)")
 	fmt.Println("     Production deployment requires Researcher tier ($100/month)")
-	fmt.Println("\nNext Steps:")
-	fmt.Println("  1. Implement RAG with LLM for contextual report generation")
-	fmt.Println("  2. Add automated alerting for KEV vulnerabilities")
-	fmt.Println("  3. Consider GreyNoise Researcher tier for production deployment")
+	fmt.Println("\nAPI Costs (per scan):")
+	fmt.Println("  - OpenAI: ~$0.001 (GPT-4o-mini)")
+	fmt.Println("  - Total: <$0.01 per scan")
 }
