@@ -59,7 +59,7 @@ func (c *LLMClient) GenerateRiskAssessment(prompt string) (string, error) {
 				Content: prompt,
 			},
 		},
-		MaxTokens: 1200,
+		MaxTokens: 2000,
 	}
 
 	jsonData, err := json.Marshal(reqBody)

@@ -17,10 +17,14 @@ import (
 	"github.com/kaustgen/Integrating_AI_OSINT/greynoise"
 	"github.com/kaustgen/Integrating_AI_OSINT/kev"
 	"github.com/kaustgen/Integrating_AI_OSINT/llm"
+	"github.com/kaustgen/Integrating_AI_OSINT/report"
 	"github.com/kaustgen/Integrating_AI_OSINT/shodan"
 )
 
 func main() {
+	// Track scan start time for report
+	scanStart := time.Now()
+
 	// Load environment variables (for Shodan API key)
 	// Create a .env file with: SHODAN_API_KEY=your_key_here
 	if err := godotenv.Load(); err != nil {
@@ -198,8 +202,12 @@ func main() {
 		}
 	}
 
+	// Sort vulnerabilities by priority before generating reports
+	fmt.Println("\nSorting vulnerabilities by priority...")
+	vulns = db.SortVulnerabilitiesByPriority(vulns)
+
 	// Generate final detailed vulnerability report
-	fmt.Println("\nGenerating detailed vulnerability report...")
+	fmt.Println("Generating detailed vulnerability report...")
 	if err := db.PrintVulnerabilityReportWithVulns(vulns); err != nil {
 		log.Fatal("Failed to generate vulnerability report:", err)
 	}
@@ -207,20 +215,22 @@ func main() {
 	// ==================== STEP 8: LLM Risk Assessment ====================
 	fmt.Println("\n[8/8] Generating AI-powered risk assessment...")
 
+	var assessment string
 	llmClient := llm.NewLLMClient()
 	if llmClient != nil && len(vulns) > 0 {
 		fmt.Println("Building risk assessment prompt...")
 		prompt := llm.BuildRiskAssessmentPrompt(vulns)
 
 		fmt.Println("Querying OpenAI API...")
-		assessment, err := llmClient.GenerateRiskAssessment(prompt)
+		aiResult, err := llmClient.GenerateRiskAssessment(prompt)
 		if err != nil {
 			log.Printf("⚠️  LLM analysis failed: %v", err)
 			fmt.Println("   Continuing without AI risk assessment")
 		} else {
+			assessment = aiResult
 			// Print AI-generated risk assessment
 			fmt.Println("\n" + strings.Repeat("=", 80))
-			fmt.Println("🤖 AI-GENERATED RISK ASSESSMENT (Top 5 Critical Assets)")
+			fmt.Println("🤖 AI-GENERATED RISK ASSESSMENT (Top 10 Critical Assets)")
 			fmt.Println(strings.Repeat("=", 80))
 			fmt.Println(assessment)
 			fmt.Println(strings.Repeat("=", 80))
@@ -231,16 +241,47 @@ func main() {
 		fmt.Println("   Get your API key from: https://platform.openai.com/api-keys")
 	}
 
+	// ==================== STEP 9: Generate HTML Report ====================
+	fmt.Println("\n[9/9] Generating HTML report...")
+
+	scanEnd := time.Now()
+	scanDuration := scanEnd.Sub(scanStart)
+
+	reportData := report.ReportData{
+		Timestamp:       scanEnd,
+		ScanDuration:    scanDuration,
+		AIAnalysis:      assessment,
+		Vulnerabilities: vulns,
+		Summary:         report.CalculateSummary(vulns, inventory),
+	}
+
+	// Generate HTML report
+	if err := report.GenerateHTML("vulnerability_report.html", reportData); err != nil {
+		log.Printf("⚠️  Failed to generate HTML report: %v", err)
+	} else {
+		// Copy CSS stylesheet
+		if err := report.CopyStylesheet("."); err != nil {
+			log.Printf("⚠️  Failed to copy stylesheet: %v", err)
+		} else {
+			fmt.Println("✅ HTML report generated: vulnerability_report.html")
+			fmt.Println("   Open in browser to view formatted report")
+		}
+	}
+
 	// ==================== Summary ====================
 	fmt.Println("\n" + strings.Repeat("=", 70))
 	fmt.Println("=== Analysis Complete ===")
-	fmt.Println("\nDatabase: vulnerabilities.db")
+	fmt.Println("\nOutput Files:")
+	fmt.Println("  📁 vulnerabilities.db (SQLite database)")
+	fmt.Println("  📄 vulnerability_report.html (formatted report)")
+	fmt.Println("  🎨 styles.css (report stylesheet)")
 	fmt.Println("\nImplemented Features:")
 	fmt.Println("  ✅ NVD CVE ingestion with CPE matching")
 	fmt.Println("  ✅ KEV integration for exploit prioritization")
 	fmt.Println("  ✅ Shodan exposure validation")
 	fmt.Println("  ✅ GreyNoise active threat intelligence")
 	fmt.Println("  ✅ LLM-powered risk assessment (OpenAI GPT-4o-mini)")
+	fmt.Println("  ✅ HTML report generation with CSS styling")
 	fmt.Println("  ✅ Semantic version comparison")
 	fmt.Println("  ✅ Risk-based vulnerability sorting")
 	fmt.Println("\nNote:")

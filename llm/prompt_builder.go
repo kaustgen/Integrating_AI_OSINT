@@ -12,6 +12,7 @@ import (
 )
 
 // BuildRiskAssessmentPrompt creates a prompt for the LLM to analyze top 5 vulnerable assets
+// and provide a complete remediation list for all vulnerabilities
 //
 // The prompt includes:
 //   - Asset details (hostname, IP, type)
@@ -22,22 +23,24 @@ import (
 //
 // Returns a formatted prompt string ready for OpenAI API
 func BuildRiskAssessmentPrompt(vulns []db.VulnerableAsset) string {
-	// Get top 5 vulnerabilities (already sorted by priority in db.FindVulnerableAssets)
+	// Get top 5 vulnerabilities for detailed analysis
 	topVulns := vulns
 	if len(topVulns) > 5 {
-		topVulns = topVulns[:5]
+		topVulns = topVulns[0:5]
 	}
 
 	var prompt strings.Builder
 
 	// Header and instructions
-	prompt.WriteString("🎯 TASK: Write a 2-paragraph executive security briefing for the board of directors.\n\n")
-	prompt.WriteString("📊 DATA: The 5 vulnerability entries below are PRE-SORTED by risk (Entry 1 = MOST CRITICAL).\n\n")
-	prompt.WriteString("⚠️  CRITICAL: Each entry is ONE SPECIFIC VULNERABILITY on ONE ASSET.\n")
-	prompt.WriteString("   - If you see the same hostname twice, those are 2 separate vulnerabilities on the same server.\n")
-	prompt.WriteString("   - Entry 1 is the #1 highest-risk finding in our entire infrastructure.\n")
-	prompt.WriteString("   - Prioritize Entry 1 above all others (spend 50% of Paragraph 1 on Entry 1 alone).\n\n")
-	prompt.WriteString("TOP 5 VULNERABILITIES (Already sorted - DO NOT re-rank):\n")
+	prompt.WriteString("TASK: Write a technical vulnerability remediation report for security analysts.\n\n")
+	prompt.WriteString("CONTEXT: You are a senior security engineer preparing a technical action plan.\n")
+	prompt.WriteString("The vulnerabilities below are PRE-SORTED by risk score (Entry 1 = HIGHEST PRIORITY).\n\n")
+	prompt.WriteString("IMPORTANT:\n")
+	prompt.WriteString("- Each entry represents ONE VULNERABILITY on ONE ASSET\n")
+	prompt.WriteString("- If the same hostname appears multiple times, those are separate CVEs\n")
+	prompt.WriteString("- CRITICAL vulnerabilities (CVSS 9.0+) require immediate attention\n")
+	prompt.WriteString("- KEV-listed vulnerabilities are actively exploited in the wild\n\n")
+	prompt.WriteString("TOP 5 VULNERABILITIES (Pre-sorted by risk - DO NOT re-rank):\n")
 	prompt.WriteString(strings.Repeat("=", 80) + "\n\n")
 
 	// Build detailed context for each vulnerability
@@ -71,7 +74,7 @@ func BuildRiskAssessmentPrompt(vulns []db.VulnerableAsset) string {
 
 		// Shodan exposure data (verified external visibility)
 		if vuln.ShodanIndexed {
-			prompt.WriteString("\n🔍 SHODAN EXPOSURE:\n")
+			prompt.WriteString("\nSHODAN EXPOSURE:\n")
 			prompt.WriteString("  - Asset is indexed in Shodan (publicly discoverable by attackers)\n")
 			if len(vuln.ShodanPorts) > 0 {
 				prompt.WriteString(fmt.Sprintf("  - Open Ports: %v\n", vuln.ShodanPorts))
@@ -123,37 +126,62 @@ func BuildRiskAssessmentPrompt(vulns []db.VulnerableAsset) string {
 
 	// Final instructions
 	prompt.WriteString(strings.Repeat("=", 80) + "\n\n")
-	prompt.WriteString("📝 OUTPUT REQUIREMENTS - READ CAREFULLY:\n\n")
+	prompt.WriteString("OUTPUT FORMAT - Technical Remediation Report:\n\n")
 
-	prompt.WriteString("PARAGRAPH 1 - Current Threat Landscape (5-7 sentences):\n")
-	prompt.WriteString("1. FIRST sentence: 'Our most critical vulnerability is [Hostname] running [AssetType] with [CVE-ID], scoring [CVSS]/10 (CRITICAL).'\n")
-	prompt.WriteString("   - Use exact data from Entry 1 above\n")
-	prompt.WriteString("2. SECOND sentence: Explain WHY Entry 1 is critical:\n")
-	prompt.WriteString("   - If KEV: 'CISA confirms this is actively exploited in the wild'\n")
-	prompt.WriteString("   - If GreyNoise: '[X] malicious IPs are currently scanning for this vulnerability'\n")
-	prompt.WriteString("   - Mention if ransomware-related\n")
-	prompt.WriteString("3. THIRD sentence: WHO is attacking (GreyNoise country data if available)\n")
-	prompt.WriteString("4. FOURTH sentence: Business impact of Entry 1 (e.g., 'Remote code execution could allow attackers to...')\n")
-	prompt.WriteString("5. Remaining sentences: Briefly mention Entries 2-3 as secondary concerns\n\n")
+	prompt.WriteString("Write a technical analysis in the following EXACT format:\n\n")
+	prompt.WriteString("## CRITICAL VULNERABILITIES (CVSS 9.0+ / KEV-Listed)\n")
+	prompt.WriteString("[List all CRITICAL entries from above in this section]\n\n")
+	prompt.WriteString("For each CRITICAL vulnerability, provide:\n")
+	prompt.WriteString("### [PRIORITY #] [Hostname] - [CVE-ID] (CVSS [Score])\n")
+	prompt.WriteString("- **Vulnerability:** [Brief description of the flaw]\n")
+	prompt.WriteString("- **Impact:** [What an attacker can achieve - RCE, data breach, etc.]\n")
+	prompt.WriteString("- **Exploitation Status:** [KEV status, GreyNoise data, Shodan exposure]\n")
+	prompt.WriteString("- **Remediation:** [Specific patch version OR mitigation steps]\n")
+	prompt.WriteString("- **Deadline:** [KEV due date OR 'Patch within 24-48 hours for CRITICAL']\n\n")
 
-	prompt.WriteString("PARAGRAPH 2 - Immediate Action Plan (5-7 sentences):\n")
-	prompt.WriteString("1. FIRST sentence: 'Immediate remediation required in priority order:'\n")
-	prompt.WriteString("2. Entry 1 action (2 sentences):\n")
-	prompt.WriteString("   - If KEV: Quote the 'Required Action' field verbatim\n")
-	prompt.WriteString("   - If not KEV: 'Patch [Hostname] to version X or apply vendor workaround'\n")
-	prompt.WriteString("   - State deadline: 'CISA mandates remediation by [KEVDueDate]' OR 'Critical patch required within 24-48 hours'\n")
-	prompt.WriteString("3. Entries 2-3 actions (1 sentence each): Brief patch/mitigation steps\n")
-	prompt.WriteString("4. LAST sentence: 'All KEV-listed vulnerabilities must be remediated by their due dates to maintain federal compliance.'\n\n")
+	prompt.WriteString("## HIGH-PRIORITY VULNERABILITIES\n")
+	prompt.WriteString("[List remaining entries here]\n\n")
+	prompt.WriteString("For each HIGH vulnerability, provide:\n")
+	prompt.WriteString("### [PRIORITY #] [Hostname] - [CVE-ID] (CVSS [Score])\n")
+	prompt.WriteString("- **Vulnerability:** [Brief description]\n")
+	prompt.WriteString("- **Remediation:** [Specific action required]\n\n")
 
-	prompt.WriteString("🚨 MANDATORY RULES - VIOLATING THESE WILL FAIL THE TASK:\n")
-	prompt.WriteString("✓ Entry 1 MUST be mentioned in FIRST sentence of Paragraph 1\n")
-	prompt.WriteString("✓ Entry 1 MUST receive 50% of Paragraph 1 content (3-4 sentences)\n")
-	prompt.WriteString("✓ Use actual HOSTNAME (e.g., 'web-prod-01') NOT generic terms like 'Asset 1'\n")
-	prompt.WriteString("✓ Include actual CVE-ID (e.g., 'CVE-2021-41773') in first sentence\n")
-	prompt.WriteString("✓ If Entry 1 has CVSS 9.0+, explicitly say 'CRITICAL severity'\n")
-	prompt.WriteString("✓ If Entry 1 is in KEV, quote the 'Required Action' EXACTLY as written above\n")
-	prompt.WriteString("✓ DO NOT re-rank or 'choose' entries - use the order given (Entry 1 is already highest priority)\n")
-	prompt.WriteString("✓ Each entry is ONE vulnerability on ONE asset - do NOT group by hostname\n\n")
+	prompt.WriteString("## COMPLETE REMEDIATION CHECKLIST\n")
+	prompt.WriteString("[THIS SECTION MUST LIST ALL ASSETS FROM THE FULL DATA BELOW - NOT JUST TOP 5]\n\n")
+	prompt.WriteString("Format as a simple checklist:\n")
+	prompt.WriteString("- [ ] [Hostname] - [CVE-ID] - [Remediation action]\n\n")
+	prompt.WriteString("Example:\n")
+	prompt.WriteString("- [ ] web-prod-01 - CVE-2021-41773 - Upgrade Apache to 2.4.51+\n")
+	prompt.WriteString("- [ ] db-primary - CVE-2021-35624 - Apply Oracle critical patch update\n\n")
+
+	// Add ALL vulnerabilities as reference data for the complete list
+	prompt.WriteString(strings.Repeat("=", 80) + "\n")
+	prompt.WriteString("FULL VULNERABILITY DATA (for complete checklist generation):\n")
+	prompt.WriteString(strings.Repeat("=", 80) + "\n\n")
+	
+	for i, vuln := range vulns {
+		prompt.WriteString(fmt.Sprintf("%d. %s (%s) - %s (CVSS %.1f)", 
+			i+1, vuln.Hostname, vuln.IPAddress, vuln.CVEID, vuln.CVSSScore))
+		if vuln.InKEV {
+			prompt.WriteString(fmt.Sprintf(" [KEV: %s]", vuln.KEVAction))
+		}
+		prompt.WriteString("\n")
+	}
+	prompt.WriteString("\n")
+
+	prompt.WriteString(strings.Repeat("=", 80) + "\n\n")
+	prompt.WriteString("MANDATORY RULES:\n")
+	prompt.WriteString("- Use the EXACT format above with ## and ### headings\n")
+	prompt.WriteString("- Always use actual hostnames (e.g., 'web-prod-01') NOT generic 'Asset 1'\n")
+	prompt.WriteString("- Include CVE-IDs in every heading (e.g., 'CVE-2021-41773')\n")
+	prompt.WriteString("- CRITICAL section = CVSS 9.0+ OR KEV-listed entries (from top 5 only)\n")
+	prompt.WriteString("- If KEV: Quote the 'Required Action' field exactly\n")
+	prompt.WriteString("- If GreyNoise active: Mention '[X] IPs currently scanning'\n")
+	prompt.WriteString("- Prioritize entries 1-3 with more detail than entries 4-5\n")
+	prompt.WriteString("- DO NOT re-rank - use the priority order provided above\n")
+	prompt.WriteString("- Be technical and specific - this is for security analysts, not executives\n")
+	prompt.WriteString("- The COMPLETE REMEDIATION CHECKLIST at the end MUST include ALL vulnerabilities from the full data\n")
+	prompt.WriteString("- The checklist is the FINAL section of the report\n\n")
 
 	return prompt.String()
 }
