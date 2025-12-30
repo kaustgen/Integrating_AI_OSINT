@@ -147,27 +147,41 @@ func BuildRiskAssessmentPrompt(vulns []db.VulnerableAsset) string {
 	prompt.WriteString("- **Remediation:** [Specific action required]\n\n")
 
 	prompt.WriteString("## COMPLETE REMEDIATION CHECKLIST\n")
-	prompt.WriteString("[THIS SECTION MUST LIST ALL ASSETS FROM THE FULL DATA BELOW - NOT JUST TOP 5]\n\n")
-	prompt.WriteString("Format as a simple checklist:\n")
-	prompt.WriteString("- [ ] [Hostname] - [CVE-ID] - [Remediation action]\n\n")
+	prompt.WriteString("[Group ALL vulnerabilities by hostname - one section per host]\n\n")
+	prompt.WriteString("Format:\n")
+	prompt.WriteString("### [Hostname] ([X] vulnerabilities)\n")
+	prompt.WriteString("- [ ] [CVE-ID] - [Remediation action] ([SEVERITY] - KEV if applicable)\n\n")
 	prompt.WriteString("Example:\n")
-	prompt.WriteString("- [ ] web-prod-01 - CVE-2021-41773 - Upgrade Apache to 2.4.51+\n")
-	prompt.WriteString("- [ ] db-primary - CVE-2021-35624 - Apply Oracle critical patch update\n\n")
+	prompt.WriteString("### web-prod-01 (3 vulnerabilities)\n")
+	prompt.WriteString("- [ ] CVE-2021-41773 - Upgrade Apache to 2.4.51+ (CRITICAL - KEV)\n")
+	prompt.WriteString("- [ ] CVE-2021-3711 - Update OpenSSL to 1.1.1l+ (HIGH)\n\n")
+	prompt.WriteString("### db-primary (1 vulnerability)\n")
+	prompt.WriteString("- [ ] CVE-2021-35624 - Apply Oracle critical patch update (HIGH)\n\n")
 
-	// Add ALL vulnerabilities as reference data for the complete list
+	// Group vulnerabilities by hostname for the LLM
 	prompt.WriteString(strings.Repeat("=", 80) + "\n")
-	prompt.WriteString("FULL VULNERABILITY DATA (for complete checklist generation):\n")
+	prompt.WriteString("FULL VULNERABILITY DATA (grouped by hostname for checklist):\n")
 	prompt.WriteString(strings.Repeat("=", 80) + "\n\n")
-	
-	for i, vuln := range vulns {
-		prompt.WriteString(fmt.Sprintf("%d. %s (%s) - %s (CVSS %.1f)", 
-			i+1, vuln.Hostname, vuln.IPAddress, vuln.CVEID, vuln.CVSSScore))
-		if vuln.InKEV {
-			prompt.WriteString(fmt.Sprintf(" [KEV: %s]", vuln.KEVAction))
+
+	// Create a map to group vulnerabilities by hostname
+	hostnameMap := make(map[string][]db.VulnerableAsset)
+	for _, vuln := range vulns {
+		hostnameMap[vuln.Hostname] = append(hostnameMap[vuln.Hostname], vuln)
+	}
+
+	// Print grouped data
+	for hostname, hostVulns := range hostnameMap {
+		prompt.WriteString(fmt.Sprintf("%s (%d vulnerabilities):\n", hostname, len(hostVulns)))
+		for _, vuln := range hostVulns {
+			prompt.WriteString(fmt.Sprintf("  - %s (CVSS %.1f - %s)",
+				vuln.CVEID, vuln.CVSSScore, vuln.CVSSSeverity))
+			if vuln.InKEV {
+				prompt.WriteString(fmt.Sprintf(" [KEV: %s]", vuln.KEVAction))
+			}
+			prompt.WriteString("\n")
 		}
 		prompt.WriteString("\n")
 	}
-	prompt.WriteString("\n")
 
 	prompt.WriteString(strings.Repeat("=", 80) + "\n\n")
 	prompt.WriteString("MANDATORY RULES:\n")
@@ -180,7 +194,8 @@ func BuildRiskAssessmentPrompt(vulns []db.VulnerableAsset) string {
 	prompt.WriteString("- Prioritize entries 1-3 with more detail than entries 4-5\n")
 	prompt.WriteString("- DO NOT re-rank - use the priority order provided above\n")
 	prompt.WriteString("- Be technical and specific - this is for security analysts, not executives\n")
-	prompt.WriteString("- The COMPLETE REMEDIATION CHECKLIST at the end MUST include ALL vulnerabilities from the full data\n")
+	prompt.WriteString("- COMPLETE REMEDIATION CHECKLIST: Group by hostname, show count, include ALL vulns\n")
+	prompt.WriteString("- Checklist format: ### Hostname (X vulnerabilities) then - [ ] CVE - Action (SEVERITY)\n")
 	prompt.WriteString("- The checklist is the FINAL section of the report\n\n")
 
 	return prompt.String()
